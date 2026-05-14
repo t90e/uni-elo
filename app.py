@@ -16,7 +16,7 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["300 per minute", "3000 per hour"],
+    default_limits=[],
     storage_uri="memory://",
 )
 
