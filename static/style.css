@@ -164,6 +164,31 @@ a:hover { text-decoration: underline; }
 }
 .votes-label { margin-left: 6px; }
 
+/* ── Mobile ────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .banner h1 { font-size: 26px; letter-spacing: 2px; }
+  .banner .tagline { font-size: 11px; }
+  .banner { padding: 12px 12px 14px; }
+
+  .question { font-size: 16px; margin-bottom: 20px; }
+  .page-content { padding: 16px 6px 32px; }
+
+  .player-card { padding: 8px 6px 12px; min-width: 0; }
+
+  .photo-wrap { width: 140px; height: 156px; }
+
+  .or-divider { padding: 0 6px; padding-top: 60px; font-size: 12px; }
+
+  .p-name { font-size: 13px; }
+  .bt-hash { font-size: 11px; }
+  .p-team { font-size: 11px; }
+
+  .lb-table { font-size: 12px; }
+  .lb-table thead th { padding: 7px 8px; }
+  .lb-table tbody td { padding: 7px 8px; }
+  .page-content.lb { padding: 14px 8px 32px; overflow-x: auto; }
+}
+
 /* ── Leaderboard ───────────────────────────────────────────── */
 .page-content.lb { text-align: left; }
 .lb-title {
