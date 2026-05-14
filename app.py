@@ -36,8 +36,8 @@ def elo_expected(ra, rb):
 
 
 def compute_elo_update(winner_elo, loser_elo, winner_votes, loser_votes):
-    k_w = 64 if winner_votes < 10 else 32
-    k_l = 64 if loser_votes < 10 else 32
+    k_w = 32 if winner_votes < 10 else 16
+    k_l = 32 if loser_votes < 10 else 16
     e_w = elo_expected(winner_elo, loser_elo)
     e_l = elo_expected(loser_elo, winner_elo)
     return round(winner_elo + k_w * (1 - e_w)), round(loser_elo + k_l * (0 - e_l))
@@ -108,11 +108,11 @@ def leaderboard():
 def get_pair():
     conn = get_db()
     try:
-        if random.random() < 0.7:
+        if random.random() < 0.5:
             p1 = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
             if p1:
                 p2 = q(conn,
-                    "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 200 ORDER BY RANDOM() LIMIT 1",
+                    "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 300 ORDER BY RANDOM() LIMIT 1",
                     (p1["id"], p1["elo"])
                 ).fetchone()
                 if not p2:
