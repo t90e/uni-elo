@@ -1,9 +1,10 @@
+import os
+import random
+import psycopg2
+import psycopg2.extras
 from flask import Flask, render_template, jsonify, request, abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-import sqlite3
-import os
-import random
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
@@ -15,13 +16,19 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "facemash.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DATABASE_URL)
+
+
+def q(conn, sql, params=None):
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(sql, params or ())
+    return cur
 
 
 def elo_expected(ra, rb):
@@ -37,7 +44,6 @@ def compute_elo_update(winner_elo, loser_elo, winner_votes, loser_votes):
 
 
 def public_player(row):
-    """Only expose what the frontend actually needs — no ELO, no stats."""
     return {
         "id":        row["id"],
         "battletag": row["battletag"],
@@ -48,10 +54,10 @@ def public_player(row):
 
 @app.after_request
 def security_headers(response):
-    response.headers["X-Content-Type-Options"]  = "nosniff"
-    response.headers["X-Frame-Options"]          = "DENY"
-    response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"]  = (
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"]         = "DENY"
+    response.headers["Referrer-Policy"]         = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "style-src 'self' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
@@ -66,7 +72,7 @@ def security_headers(response):
 @app.route("/")
 def index():
     conn = get_db()
-    total_votes = conn.execute("SELECT COUNT(*) FROM votes").fetchone()[0]
+    total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
     conn.close()
     return render_template("index.html", total_votes=total_votes)
 
@@ -74,14 +80,14 @@ def index():
 @app.route("/leaderboard")
 def leaderboard():
     conn = get_db()
-    players = conn.execute("""
+    players = q(conn, """
         SELECT *,
                CASE WHEN total_votes > 0
                     THEN ROUND(wins * 100.0 / total_votes, 1)
                     ELSE 0 END AS win_rate
         FROM players ORDER BY elo DESC
     """).fetchall()
-    total_votes = conn.execute("SELECT COUNT(*) FROM votes").fetchone()[0]
+    total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
     conn.close()
     return render_template(
         "leaderboard.html",
@@ -97,21 +103,21 @@ def leaderboard():
 def get_pair():
     conn = get_db()
     if random.random() < 0.7:
-        p1 = conn.execute("SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
+        p1 = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
         if p1:
-            p2 = conn.execute(
-                "SELECT * FROM players WHERE id != ? AND ABS(elo - ?) <= 200 ORDER BY RANDOM() LIMIT 1",
-                (p1["id"], p1["elo"]),
+            p2 = q(conn,
+                "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 200 ORDER BY RANDOM() LIMIT 1",
+                (p1["id"], p1["elo"])
             ).fetchone()
             if not p2:
-                p2 = conn.execute(
-                    "SELECT * FROM players WHERE id != ? ORDER BY RANDOM() LIMIT 1",
-                    (p1["id"],),
+                p2 = q(conn,
+                    "SELECT * FROM players WHERE id != %s ORDER BY RANDOM() LIMIT 1",
+                    (p1["id"],)
                 ).fetchone()
         else:
             p1 = p2 = None
     else:
-        rows = conn.execute("SELECT * FROM players ORDER BY RANDOM() LIMIT 2").fetchall()
+        rows = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 2").fetchall()
         p1 = rows[0] if len(rows) > 0 else None
         p2 = rows[1] if len(rows) > 1 else None
     conn.close()
@@ -139,8 +145,8 @@ def vote():
         abort(400)
 
     conn = get_db()
-    winner = conn.execute("SELECT * FROM players WHERE id=?", (winner_id,)).fetchone()
-    loser  = conn.execute("SELECT * FROM players WHERE id=?", (loser_id,)).fetchone()
+    winner = q(conn, "SELECT * FROM players WHERE id=%s", (winner_id,)).fetchone()
+    loser  = q(conn, "SELECT * FROM players WHERE id=%s", (loser_id,)).fetchone()
 
     if not winner or not loser:
         conn.close()
@@ -151,19 +157,14 @@ def vote():
         winner["elo"], loser["elo"], winner["total_votes"], loser["total_votes"]
     )
 
-    conn.execute(
-        "UPDATE players SET elo=?, wins=wins+1, total_votes=total_votes+1 WHERE id=?",
-        (new_w, winner_id),
-    )
-    conn.execute(
-        "UPDATE players SET elo=?, losses=losses+1, total_votes=total_votes+1 WHERE id=?",
-        (new_l, loser_id),
-    )
-    conn.execute(
-        "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after) "
-        "VALUES (?,?,?,?,?,?)",
-        (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l),
-    )
+    q(conn, "UPDATE players SET elo=%s, wins=wins+1, total_votes=total_votes+1 WHERE id=%s",
+      (new_w, winner_id))
+    q(conn, "UPDATE players SET elo=%s, losses=losses+1, total_votes=total_votes+1 WHERE id=%s",
+      (new_l, loser_id))
+    q(conn,
+      "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after) "
+      "VALUES (%s,%s,%s,%s,%s,%s)",
+      (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l))
     conn.commit()
     conn.close()
 
@@ -173,20 +174,16 @@ def vote():
 # ── Error handlers ───────────────────────────────────────────
 
 @app.errorhandler(400)
-def bad_request(e):
-    return jsonify({"error": "bad request"}), 400
+def bad_request(e):  return jsonify({"error": "bad request"}), 400
 
 @app.errorhandler(404)
-def not_found(e):
-    return jsonify({"error": "not found"}), 404
+def not_found(e):    return jsonify({"error": "not found"}), 404
 
 @app.errorhandler(429)
-def rate_limited(e):
-    return jsonify({"error": "slow down"}), 429
+def rate_limited(e): return jsonify({"error": "slow down"}), 429
 
 @app.errorhandler(503)
-def unavailable(e):
-    return jsonify({"error": "unavailable"}), 503
+def unavailable(e):  return jsonify({"error": "unavailable"}), 503
 
 
 if __name__ == "__main__":
