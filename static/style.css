@@ -160,6 +160,33 @@ a:hover { text-decoration: underline; }
 }
 #skip-btn:hover { background: #f4f6fb; color: #555; }
 
+/* ── Captcha ───────────────────────────────────────────────── */
+#captcha-box {
+  display: none;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #555;
+}
+#captcha-question { margin-right: 8px; }
+#captcha-input {
+  width: 60px;
+  padding: 4px 6px;
+  border: 1px solid #b8bcc8;
+  font-size: 13px;
+  text-align: center;
+  margin-right: 4px;
+}
+#captcha-submit {
+  background: none;
+  border: 1px solid #b8bcc8;
+  color: #555;
+  font-size: 13px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+#captcha-submit:hover { background: #f4f6fb; }
+#captcha-error { color: #993333; margin-left: 8px; font-size: 12px; }
+
 /* ── Votes box ─────────────────────────────────────────────── */
 .votes-box {
   display: inline-block;
