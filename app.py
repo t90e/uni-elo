@@ -162,8 +162,8 @@ def vote():
     conn = get_db()
     try:
         recent = q(conn,
-            "SELECT COUNT(*) AS n FROM votes WHERE ip_address=%s AND voted_at > NOW() - INTERVAL '24 hours'",
-            (client_ip,)).fetchone()["n"]
+            "SELECT COUNT(*) AS n FROM votes WHERE ip_address=%s AND winner_id=%s AND voted_at > NOW() - INTERVAL '24 hours'",
+            (client_ip, winner_id)).fetchone()["n"]
         if recent >= 20:
             abort(429)
 
