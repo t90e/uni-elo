@@ -104,7 +104,9 @@ def security_headers(response):
         "style-src 'self' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
         "img-src 'self' https://nse.gg data:; "
-        "script-src 'self';"
+        "script-src 'self' https://platform.twitter.com; "
+        "frame-src https://platform.twitter.com https://syndication.twitter.com; "
+        "connect-src 'self' https://api.twitter.com;"
     )
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if not request.cookies.get("vid"):

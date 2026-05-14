@@ -178,6 +178,13 @@ a:hover { text-decoration: underline; }
 }
 .votes-label { margin-left: 6px; }
 
+/* ── Tweet embed ───────────────────────────────────────────── */
+.tweet-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 32px 20px 48px;
+}
+
 /* ── Mobile ────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .banner h1 { font-size: 26px; letter-spacing: 2px; }
