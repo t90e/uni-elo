@@ -186,11 +186,15 @@ def rate_limited(e): return jsonify({"error": "slow down"}), 429
 def unavailable(e):  return jsonify({"error": "unavailable"}), 503
 
 
-# ── Auto-init DB on startup ──────────────────────────────────
+# ── Auto-init / reset DB on startup ─────────────────────────
 if DATABASE_URL:
     try:
-        from init_db import init as _init_db
-        _init_db()
+        if os.environ.get("RESET_DB") == "1":
+            from reset_db import reset as _reset_db
+            _reset_db()
+        else:
+            from init_db import init as _init_db
+            _init_db()
     except Exception as _e:
         print(f"DB init error: {_e}")
 
