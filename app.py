@@ -62,8 +62,9 @@ def security_headers(response):
         "style-src 'self' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
         "img-src 'self' https://nse.gg data:; "
-        "script-src 'self' 'unsafe-inline';"
+        "script-src 'self';"
     )
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -72,23 +73,27 @@ def security_headers(response):
 @app.route("/")
 def index():
     conn = get_db()
-    total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
-    conn.close()
+    try:
+        total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
+    finally:
+        conn.close()
     return render_template("index.html", total_votes=total_votes)
 
 
 @app.route("/leaderboard")
 def leaderboard():
     conn = get_db()
-    players = q(conn, """
-        SELECT *,
-               CASE WHEN total_votes > 0
-                    THEN ROUND(wins * 100.0 / total_votes, 1)
-                    ELSE 0 END AS win_rate
-        FROM players ORDER BY elo DESC
-    """).fetchall()
-    total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
-    conn.close()
+    try:
+        players = q(conn, """
+            SELECT *,
+                   CASE WHEN total_votes > 0
+                        THEN ROUND(wins * 100.0 / total_votes, 1)
+                        ELSE 0 END AS win_rate
+            FROM players ORDER BY elo DESC
+        """).fetchall()
+        total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
+    finally:
+        conn.close()
     return render_template(
         "leaderboard.html",
         players=[dict(p) for p in players],
@@ -102,25 +107,27 @@ def leaderboard():
 @limiter.limit("120 per minute")
 def get_pair():
     conn = get_db()
-    if random.random() < 0.7:
-        p1 = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
-        if p1:
-            p2 = q(conn,
-                "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 200 ORDER BY RANDOM() LIMIT 1",
-                (p1["id"], p1["elo"])
-            ).fetchone()
-            if not p2:
+    try:
+        if random.random() < 0.7:
+            p1 = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
+            if p1:
                 p2 = q(conn,
-                    "SELECT * FROM players WHERE id != %s ORDER BY RANDOM() LIMIT 1",
-                    (p1["id"],)
+                    "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 200 ORDER BY RANDOM() LIMIT 1",
+                    (p1["id"], p1["elo"])
                 ).fetchone()
+                if not p2:
+                    p2 = q(conn,
+                        "SELECT * FROM players WHERE id != %s ORDER BY RANDOM() LIMIT 1",
+                        (p1["id"],)
+                    ).fetchone()
+            else:
+                p1 = p2 = None
         else:
-            p1 = p2 = None
-    else:
-        rows = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 2").fetchall()
-        p1 = rows[0] if len(rows) > 0 else None
-        p2 = rows[1] if len(rows) > 1 else None
-    conn.close()
+            rows = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 2").fetchall()
+            p1 = rows[0] if len(rows) > 0 else None
+            p2 = rows[1] if len(rows) > 1 else None
+    finally:
+        conn.close()
 
     if not p1 or not p2:
         abort(503)
@@ -145,28 +152,29 @@ def vote():
         abort(400)
 
     conn = get_db()
-    winner = q(conn, "SELECT * FROM players WHERE id=%s", (winner_id,)).fetchone()
-    loser  = q(conn, "SELECT * FROM players WHERE id=%s", (loser_id,)).fetchone()
+    try:
+        winner = q(conn, "SELECT * FROM players WHERE id=%s", (winner_id,)).fetchone()
+        loser  = q(conn, "SELECT * FROM players WHERE id=%s", (loser_id,)).fetchone()
 
-    if not winner or not loser:
+        if not winner or not loser:
+            abort(404)
+
+        winner, loser = dict(winner), dict(loser)
+        new_w, new_l = compute_elo_update(
+            winner["elo"], loser["elo"], winner["total_votes"], loser["total_votes"]
+        )
+
+        q(conn, "UPDATE players SET elo=%s, wins=wins+1, total_votes=total_votes+1 WHERE id=%s",
+          (new_w, winner_id))
+        q(conn, "UPDATE players SET elo=%s, losses=losses+1, total_votes=total_votes+1 WHERE id=%s",
+          (new_l, loser_id))
+        q(conn,
+          "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after) "
+          "VALUES (%s,%s,%s,%s,%s,%s)",
+          (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l))
+        conn.commit()
+    finally:
         conn.close()
-        abort(404)
-
-    winner, loser = dict(winner), dict(loser)
-    new_w, new_l = compute_elo_update(
-        winner["elo"], loser["elo"], winner["total_votes"], loser["total_votes"]
-    )
-
-    q(conn, "UPDATE players SET elo=%s, wins=wins+1, total_votes=total_votes+1 WHERE id=%s",
-      (new_w, winner_id))
-    q(conn, "UPDATE players SET elo=%s, losses=losses+1, total_votes=total_votes+1 WHERE id=%s",
-      (new_l, loser_id))
-    q(conn,
-      "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after) "
-      "VALUES (%s,%s,%s,%s,%s,%s)",
-      (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l))
-    conn.commit()
-    conn.close()
 
     return jsonify({"ok": True})
 
