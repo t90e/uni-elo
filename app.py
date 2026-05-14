@@ -43,6 +43,12 @@ def compute_elo_update(winner_elo, loser_elo, winner_votes, loser_votes):
     return round(winner_elo + k_w * (1 - e_w)), round(loser_elo + k_l * (0 - e_l))
 
 
+def get_client_ip():
+    return (request.headers.get("CF-Connecting-IP") or
+            request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or
+            request.remote_addr)
+
+
 def public_player(row):
     return {
         "id":        row["id"],
@@ -151,8 +157,16 @@ def vote():
     if winner_id == loser_id:
         abort(400)
 
+    client_ip = get_client_ip()
+
     conn = get_db()
     try:
+        recent = q(conn,
+            "SELECT COUNT(*) AS n FROM votes WHERE ip_address=%s AND voted_at > NOW() - INTERVAL '24 hours'",
+            (client_ip,)).fetchone()["n"]
+        if recent >= 20:
+            abort(429)
+
         winner = q(conn, "SELECT * FROM players WHERE id=%s", (winner_id,)).fetchone()
         loser  = q(conn, "SELECT * FROM players WHERE id=%s", (loser_id,)).fetchone()
 
@@ -169,9 +183,9 @@ def vote():
         q(conn, "UPDATE players SET elo=%s, losses=losses+1, total_votes=total_votes+1 WHERE id=%s",
           (new_l, loser_id))
         q(conn,
-          "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after) "
-          "VALUES (%s,%s,%s,%s,%s,%s)",
-          (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l))
+          "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after,ip_address) "
+          "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+          (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l, client_ip))
         conn.commit()
     finally:
         conn.close()
