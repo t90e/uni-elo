@@ -84,4 +84,7 @@ async function castVote(num) {
   setTimeout(() => { busy = false; loadPair(); }, 600);
 }
 
+document.getElementById('card1').addEventListener('click', () => castVote(1));
+document.getElementById('card2').addEventListener('click', () => castVote(2));
+
 loadPair();
