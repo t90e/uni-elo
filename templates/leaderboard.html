@@ -37,7 +37,7 @@
         <th class="avatar-cell"></th>
         <th>Player</th>
         <th>Team</th>
-        <th>Win %</th>
+        <th>ELO</th>
         <th class="votes-cell">Votes</th>
       </tr>
     </thead>
@@ -63,11 +63,7 @@
           <span class="p-name">{{ player.battletag.split('#')[0] }}</span>{% if '#' in player.battletag %}<span class="bt-hash">#{{ player.battletag.split('#')[1] }}</span>{% endif %}
         </td>
         <td>{{ player.team }}</td>
-        <td>
-          {% if player.total_votes > 0 %}
-            <span class="winrate-bar-wrap"><span class="winrate-bar" style="width:{{ player.win_rate }}%"></span></span>{{ player.win_rate }}%
-          {% else %}—{% endif %}
-        </td>
+        <td class="elo-cell">{{ player.elo }}</td>
         <td class="votes-cell">{{ player.total_votes }}</td>
       </tr>
       {% endfor %}
