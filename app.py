@@ -186,7 +186,7 @@ def get_pair():
 
 
 @app.route("/api/vote", methods=["POST"])
-@limiter.limit("10 per minute")
+@limiter.limit("30 per minute")
 def vote():
     data = request.get_json(silent=True)
     if not data:
