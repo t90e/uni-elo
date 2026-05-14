@@ -186,6 +186,15 @@ def rate_limited(e): return jsonify({"error": "slow down"}), 429
 def unavailable(e):  return jsonify({"error": "unavailable"}), 503
 
 
+# ── Auto-init DB on startup ──────────────────────────────────
+if DATABASE_URL:
+    try:
+        from init_db import init as _init_db
+        _init_db()
+    except Exception as _e:
+        print(f"DB init error: {_e}")
+
+
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     app.run(debug=debug, port=5000)
