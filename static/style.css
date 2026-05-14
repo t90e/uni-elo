@@ -34,12 +34,10 @@ a:hover { text-decoration: underline; }
 
 /* ── Notice bar ────────────────────────────────────────────── */
 .notice-bar {
-  background: #fff3cd;
-  color: #856404;
   text-align: center;
-  padding: 8px 20px;
   font-size: 13px;
-  border-bottom: 1px solid #ffc107;
+  color: #666;
+  margin-bottom: 20px;
 }
 
 /* ── Site nav ──────────────────────────────────────────────── */
