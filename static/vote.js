@@ -58,7 +58,7 @@ async function loadPair() {
   }
 }
 
-async function castVote(num) {
+function castVote(num) {
   if (busy || !current.player1) return;
   busy = true;
 
@@ -68,20 +68,16 @@ async function castVote(num) {
   const winnerId = num === 1 ? current.player1.id : current.player2.id;
   const loserId  = num === 1 ? current.player2.id : current.player1.id;
 
-  try {
-    await fetch('/api/vote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ winner_id: winnerId, loser_id: loserId, token: current.token }),
-    });
-    document.getElementById('win' + num).textContent = '✓ Winner';
+  fetch('/api/vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winner_id: winnerId, loser_id: loserId, token: current.token }),
+  }).then(() => {
     const c = document.getElementById('vote-count');
     c.textContent = parseInt(c.textContent.replace(/,/g, '')) + 1;
-  } catch (e) {
-    console.error(e);
-  }
+  }).catch(e => console.error(e));
 
-  setTimeout(() => { busy = false; loadPair(); }, 600);
+  setTimeout(() => { busy = false; loadPair(); }, 180);
 }
 
 document.getElementById('card1').addEventListener('click', () => castVote(1));
