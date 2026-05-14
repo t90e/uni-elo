@@ -1,0 +1,8 @@
+facemash.db
+.env
+__pycache__/
+*.pyc
+*.pyo
+flask_out.txt
+flask_err.txt
+.DS_Store

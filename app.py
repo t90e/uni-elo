@@ -1,0 +1,194 @@
+from flask import Flask, render_template, jsonify, request, abort
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+import sqlite3
+import os
+import random
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
+)
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "facemash.db")
+
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def elo_expected(ra, rb):
+    return 1 / (1 + 10 ** ((rb - ra) / 400))
+
+
+def compute_elo_update(winner_elo, loser_elo, winner_votes, loser_votes):
+    k_w = 64 if winner_votes < 10 else 32
+    k_l = 64 if loser_votes < 10 else 32
+    e_w = elo_expected(winner_elo, loser_elo)
+    e_l = elo_expected(loser_elo, winner_elo)
+    return round(winner_elo + k_w * (1 - e_w)), round(loser_elo + k_l * (0 - e_l))
+
+
+def public_player(row):
+    """Only expose what the frontend actually needs — no ELO, no stats."""
+    return {
+        "id":        row["id"],
+        "battletag": row["battletag"],
+        "team":      row["team"],
+        "image_url": row["image_url"],
+    }
+
+
+@app.after_request
+def security_headers(response):
+    response.headers["X-Content-Type-Options"]  = "nosniff"
+    response.headers["X-Frame-Options"]          = "DENY"
+    response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"]  = (
+        "default-src 'self'; "
+        "style-src 'self' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; "
+        "img-src 'self' https://nse.gg data:; "
+        "script-src 'self' 'unsafe-inline';"
+    )
+    return response
+
+
+# ── Pages ────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    conn = get_db()
+    total_votes = conn.execute("SELECT COUNT(*) FROM votes").fetchone()[0]
+    conn.close()
+    return render_template("index.html", total_votes=total_votes)
+
+
+@app.route("/leaderboard")
+def leaderboard():
+    conn = get_db()
+    players = conn.execute("""
+        SELECT *,
+               CASE WHEN total_votes > 0
+                    THEN ROUND(wins * 100.0 / total_votes, 1)
+                    ELSE 0 END AS win_rate
+        FROM players ORDER BY elo DESC
+    """).fetchall()
+    total_votes = conn.execute("SELECT COUNT(*) FROM votes").fetchone()[0]
+    conn.close()
+    return render_template(
+        "leaderboard.html",
+        players=[dict(p) for p in players],
+        total_votes=total_votes,
+    )
+
+
+# ── API ──────────────────────────────────────────────────────
+
+@app.route("/api/pair")
+@limiter.limit("120 per minute")
+def get_pair():
+    conn = get_db()
+    if random.random() < 0.7:
+        p1 = conn.execute("SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
+        if p1:
+            p2 = conn.execute(
+                "SELECT * FROM players WHERE id != ? AND ABS(elo - ?) <= 200 ORDER BY RANDOM() LIMIT 1",
+                (p1["id"], p1["elo"]),
+            ).fetchone()
+            if not p2:
+                p2 = conn.execute(
+                    "SELECT * FROM players WHERE id != ? ORDER BY RANDOM() LIMIT 1",
+                    (p1["id"],),
+                ).fetchone()
+        else:
+            p1 = p2 = None
+    else:
+        rows = conn.execute("SELECT * FROM players ORDER BY RANDOM() LIMIT 2").fetchall()
+        p1 = rows[0] if len(rows) > 0 else None
+        p2 = rows[1] if len(rows) > 1 else None
+    conn.close()
+
+    if not p1 or not p2:
+        abort(503)
+
+    return jsonify({"player1": public_player(p1), "player2": public_player(p2)})
+
+
+@app.route("/api/vote", methods=["POST"])
+@limiter.limit("30 per minute")
+def vote():
+    data = request.get_json(silent=True)
+    if not data:
+        abort(400)
+
+    try:
+        winner_id = int(data["winner_id"])
+        loser_id  = int(data["loser_id"])
+    except (KeyError, TypeError, ValueError):
+        abort(400)
+
+    if winner_id == loser_id:
+        abort(400)
+
+    conn = get_db()
+    winner = conn.execute("SELECT * FROM players WHERE id=?", (winner_id,)).fetchone()
+    loser  = conn.execute("SELECT * FROM players WHERE id=?", (loser_id,)).fetchone()
+
+    if not winner or not loser:
+        conn.close()
+        abort(404)
+
+    winner, loser = dict(winner), dict(loser)
+    new_w, new_l = compute_elo_update(
+        winner["elo"], loser["elo"], winner["total_votes"], loser["total_votes"]
+    )
+
+    conn.execute(
+        "UPDATE players SET elo=?, wins=wins+1, total_votes=total_votes+1 WHERE id=?",
+        (new_w, winner_id),
+    )
+    conn.execute(
+        "UPDATE players SET elo=?, losses=losses+1, total_votes=total_votes+1 WHERE id=?",
+        (new_l, loser_id),
+    )
+    conn.execute(
+        "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after) "
+        "VALUES (?,?,?,?,?,?)",
+        (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l),
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+
+
+# ── Error handlers ───────────────────────────────────────────
+
+@app.errorhandler(400)
+def bad_request(e):
+    return jsonify({"error": "bad request"}), 400
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "not found"}), 404
+
+@app.errorhandler(429)
+def rate_limited(e):
+    return jsonify({"error": "slow down"}), 429
+
+@app.errorhandler(503)
+def unavailable(e):
+    return jsonify({"error": "unavailable"}), 503
+
+
+if __name__ == "__main__":
+    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug, port=5000)

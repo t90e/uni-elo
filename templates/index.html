@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Uni Overwatch Smash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="banner">
+  <h1>Uni Overwatch Smash</h1>
+  <div class="tagline">Are we let in for our skill? No. Will we be judged on it? Yes.</div>
+</div>
+
+<div class="site-nav">
+  <a href="/" class="active">Vote</a>
+  <a href="/leaderboard">Rankings</a>
+</div>
+
+<div class="page-content">
+  <div class="question">Who would you rather have on your team?</div>
+
+  <div class="arena" id="arena">
+
+    <div class="player-card" id="card1" onclick="castVote(1)">
+      <div class="photo-wrap" id="wrap1"></div>
+      <div class="p-name"  id="name1"></div>
+      <div class="p-team"  id="team1"></div>
+      <div class="winner-label" id="win1"></div>
+    </div>
+
+    <div class="or-divider">or</div>
+
+    <div class="player-card" id="card2" onclick="castVote(2)">
+      <div class="photo-wrap" id="wrap2"></div>
+      <div class="p-name"  id="name2"></div>
+      <div class="p-team"  id="team2"></div>
+      <div class="winner-label" id="win2"></div>
+    </div>
+
+  </div>
+
+  <div class="votes-box">
+    <span class="votes-num" id="vote-count">{{ total_votes }}</span>
+    <span class="votes-label">Total Votes</span>
+  </div>
+
+</div>
+
+<script>
+  let current = { player1: null, player2: null };
+  let busy = false;
+
+  function setPhoto(wrapEl, url) {
+    wrapEl.innerHTML = '';
+    wrapEl.classList.toggle('has-placeholder', !url);
+    const img = document.createElement('img');
+    if (url) {
+      img.src = url;
+      img.className = 'photo-real';
+    } else {
+      img.src = '/static/user.svg';
+      img.className = 'photo-placeholder';
+    }
+    wrapEl.appendChild(img);
+  }
+
+  function setName(el, tag) {
+    const i = tag.indexOf('#');
+    if (i === -1) { el.textContent = tag; return; }
+    el.innerHTML = tag.slice(0, i) + '<span class="bt-hash">#' + tag.slice(i + 1) + '</span>';
+  }
+
+  async function loadPair() {
+    if (busy) return;
+    const arena = document.getElementById('arena');
+    arena.classList.add('loading');
+    document.getElementById('card1').classList.remove('winner', 'loser');
+    document.getElementById('card2').classList.remove('winner', 'loser');
+    document.getElementById('win1').textContent = '';
+    document.getElementById('win2').textContent = '';
+
+    try {
+      const res  = await fetch('/api/pair');
+      const data = await res.json();
+      current = data;
+
+      setPhoto(document.getElementById('wrap1'), data.player1.image_url);
+      setName(document.getElementById('name1'), data.player1.battletag);
+      document.getElementById('team1').textContent = data.player1.team;
+
+      setPhoto(document.getElementById('wrap2'), data.player2.image_url);
+      setName(document.getElementById('name2'), data.player2.battletag);
+      document.getElementById('team2').textContent = data.player2.team;
+    } catch (e) {
+      console.error(e);
+    } finally {
+      arena.classList.remove('loading');
+    }
+  }
+
+  async function castVote(num) {
+    if (busy || !current.player1) return;
+    busy = true;
+
+    document.getElementById('card' + num).classList.add('winner');
+    document.getElementById('card' + (num === 1 ? 2 : 1)).classList.add('loser');
+
+    const winnerId = num === 1 ? current.player1.id : current.player2.id;
+    const loserId  = num === 1 ? current.player2.id : current.player1.id;
+
+    try {
+      const res = await fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ winner_id: winnerId, loser_id: loserId }),
+      });
+      await res.json();
+      document.getElementById('win' + num).textContent = '✓ Winner';
+
+      const c = document.getElementById('vote-count');
+      c.textContent = parseInt(c.textContent.replace(/,/g, '')) + 1;
+    } catch (e) {
+      console.error(e);
+    }
+
+    setTimeout(() => { busy = false; loadPair(); }, 600);
+  }
+
+  loadPair();
+</script>
+</body>
+</html>

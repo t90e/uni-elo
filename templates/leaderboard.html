@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rankings – Uni Overwatch Smash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="banner">
+  <h1>Uni Overwatch Smash</h1>
+  <div class="tagline">Are we let in for our skill? No. Will we be judged on it? Yes.</div>
+</div>
+
+<div class="site-nav">
+  <a href="/">Vote</a>
+  <a href="/leaderboard" class="active">Rankings</a>
+</div>
+
+<div class="page-content lb">
+
+  <div class="lb-title">
+    Player Rankings
+    <div class="votes-box">
+      <span class="votes-num">{{ total_votes }}</span>
+      <span class="votes-label">Total Votes</span>
+    </div>
+  </div>
+
+  <table class="lb-table">
+    <thead>
+      <tr>
+        <th class="rank-cell">#</th>
+        <th class="avatar-cell"></th>
+        <th>Player</th>
+        <th>Team</th>
+        <th>Win %</th>
+        <th class="votes-cell">Votes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for player in players %}
+      <tr class="{% if loop.index0 == 0 %}rank-gold{% elif loop.index0 == 1 %}rank-silver{% elif loop.index0 == 2 %}rank-bronze{% endif %}">
+        <td class="rank-cell">
+          {% if loop.index0 == 0 %}🥇
+          {% elif loop.index0 == 1 %}🥈
+          {% elif loop.index0 == 2 %}🥉
+          {% else %}{{ loop.index }}{% endif %}
+        </td>
+        <td class="avatar-cell">
+          <div class="lb-photo{% if not player.image_url %} has-placeholder{% endif %}">
+            {% if player.image_url %}
+              <img src="{{ player.image_url }}" class="lb-photo-real" alt="">
+            {% else %}
+              <img src="/static/user.svg" class="lb-photo-placeholder" alt="">
+            {% endif %}
+          </div>
+        </td>
+        <td>
+          <span class="p-name">{{ player.battletag.split('#')[0] }}</span>{% if '#' in player.battletag %}<span class="bt-hash">#{{ player.battletag.split('#')[1] }}</span>{% endif %}
+        </td>
+        <td>{{ player.team }}</td>
+        <td>
+          {% if player.total_votes > 0 %}
+            <span class="winrate-bar-wrap"><span class="winrate-bar" style="width:{{ player.win_rate }}%"></span></span>{{ player.win_rate }}%
+          {% else %}—{% endif %}
+        </td>
+        <td class="votes-cell">{{ player.total_votes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+</div>
+</body>
+</html>
