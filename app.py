@@ -210,14 +210,6 @@ def vote():
 
     conn = get_db()
     try:
-        recent = q(conn,
-            "SELECT COUNT(*) AS n FROM votes "
-            "WHERE (ip_address=%s OR voter_id=%s) AND winner_id=%s "
-            "AND voted_at > NOW() - INTERVAL '24 hours'",
-            (client_ip, voter_id, winner_id)).fetchone()["n"]
-        if recent >= 20:
-            abort(429)
-
         winner = q(conn, "SELECT * FROM players WHERE id=%s", (winner_id,)).fetchone()
         loser  = q(conn, "SELECT * FROM players WHERE id=%s", (loser_id,)).fetchone()
 
