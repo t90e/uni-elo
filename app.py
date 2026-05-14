@@ -1,8 +1,12 @@
 import os
+import hmac
+import hashlib
+import time
 import random
+import uuid as _uuid
 import psycopg2
 import psycopg2.extras
-from flask import Flask, render_template, jsonify, request, abort
+from flask import Flask, render_template, jsonify, request, abort, g
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -12,7 +16,7 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=[],
+    default_limits=["300 per minute", "3000 per hour"],
     storage_uri="memory://",
 )
 
@@ -49,6 +53,33 @@ def get_client_ip():
             request.remote_addr)
 
 
+def _secret_bytes():
+    k = app.config["SECRET_KEY"]
+    return k if isinstance(k, bytes) else k.encode()
+
+
+def make_pair_token(p1_id, p2_id):
+    ts = int(time.time())
+    msg = f"{p1_id}:{p2_id}:{ts}".encode()
+    sig = hmac.new(_secret_bytes(), msg, hashlib.sha256).hexdigest()
+    return f"{p1_id}:{p2_id}:{ts}:{sig}"
+
+
+def verify_pair_token(token, winner_id, loser_id):
+    try:
+        parts = token.split(":")
+        p1, p2, ts, sig = int(parts[0]), int(parts[1]), int(parts[2]), parts[3]
+    except Exception:
+        return False
+    if time.time() - ts > 300:  # expires after 5 minutes
+        return False
+    if {p1, p2} != {winner_id, loser_id}:
+        return False
+    msg = f"{p1}:{p2}:{ts}".encode()
+    expected = hmac.new(_secret_bytes(), msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected)
+
+
 def public_player(row):
     return {
         "id":        row["id"],
@@ -56,6 +87,11 @@ def public_player(row):
         "team":      row["team"],
         "image_url": row["image_url"],
     }
+
+
+@app.before_request
+def load_voter_id():
+    g.voter_id = request.cookies.get("vid") or str(_uuid.uuid4())
 
 
 @app.after_request
@@ -71,6 +107,13 @@ def security_headers(response):
         "script-src 'self';"
     )
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if not request.cookies.get("vid"):
+        response.set_cookie(
+            "vid", g.voter_id,
+            max_age=365 * 24 * 3600,
+            httponly=True,
+            samesite="Strict",
+        )
     return response
 
 
@@ -138,7 +181,8 @@ def get_pair():
     if not p1 or not p2:
         abort(503)
 
-    return jsonify({"player1": public_player(p1), "player2": public_player(p2)})
+    token = make_pair_token(p1["id"], p2["id"])
+    return jsonify({"player1": public_player(p1), "player2": public_player(p2), "token": token})
 
 
 @app.route("/api/vote", methods=["POST"])
@@ -151,19 +195,26 @@ def vote():
     try:
         winner_id = int(data["winner_id"])
         loser_id  = int(data["loser_id"])
+        token     = str(data["token"])
     except (KeyError, TypeError, ValueError):
         abort(400)
 
     if winner_id == loser_id:
         abort(400)
 
+    if not verify_pair_token(token, winner_id, loser_id):
+        abort(403)
+
     client_ip = get_client_ip()
+    voter_id  = g.voter_id
 
     conn = get_db()
     try:
         recent = q(conn,
-            "SELECT COUNT(*) AS n FROM votes WHERE ip_address=%s AND winner_id=%s AND voted_at > NOW() - INTERVAL '24 hours'",
-            (client_ip, winner_id)).fetchone()["n"]
+            "SELECT COUNT(*) AS n FROM votes "
+            "WHERE (ip_address=%s OR voter_id=%s) AND winner_id=%s "
+            "AND voted_at > NOW() - INTERVAL '24 hours'",
+            (client_ip, voter_id, winner_id)).fetchone()["n"]
         if recent >= 20:
             abort(429)
 
@@ -183,9 +234,10 @@ def vote():
         q(conn, "UPDATE players SET elo=%s, losses=losses+1, total_votes=total_votes+1 WHERE id=%s",
           (new_l, loser_id))
         q(conn,
-          "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,winner_elo_after,loser_elo_after,ip_address) "
-          "VALUES (%s,%s,%s,%s,%s,%s,%s)",
-          (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l, client_ip))
+          "INSERT INTO votes (winner_id,loser_id,winner_elo_before,loser_elo_before,"
+          "winner_elo_after,loser_elo_after,ip_address,voter_id) "
+          "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+          (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l, client_ip, voter_id))
         conn.commit()
     finally:
         conn.close()
@@ -197,6 +249,9 @@ def vote():
 
 @app.errorhandler(400)
 def bad_request(e):  return jsonify({"error": "bad request"}), 400
+
+@app.errorhandler(403)
+def forbidden(e):    return jsonify({"error": "forbidden"}), 403
 
 @app.errorhandler(404)
 def not_found(e):    return jsonify({"error": "not found"}), 404

@@ -72,7 +72,7 @@ async function castVote(num) {
     await fetch('/api/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ winner_id: winnerId, loser_id: loserId }),
+      body: JSON.stringify({ winner_id: winnerId, loser_id: loserId, token: current.token }),
     });
     document.getElementById('win' + num).textContent = '✓ Winner';
     const c = document.getElementById('vote-count');
