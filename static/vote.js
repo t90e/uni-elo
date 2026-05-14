@@ -86,5 +86,6 @@ async function castVote(num) {
 
 document.getElementById('card1').addEventListener('click', () => castVote(1));
 document.getElementById('card2').addEventListener('click', () => castVote(2));
+document.getElementById('skip-btn').addEventListener('click', () => { if (!busy) loadPair(); });
 
 loadPair();

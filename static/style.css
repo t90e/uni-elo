@@ -147,6 +147,19 @@ a:hover { text-decoration: underline; }
   font-style: italic;
 }
 
+/* ── Skip ──────────────────────────────────────────────────── */
+.skip-wrap { margin-top: 18px; }
+#skip-btn {
+  background: none;
+  border: 1px solid #b8bcc8;
+  color: #888;
+  font-size: 13px;
+  padding: 5px 22px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+#skip-btn:hover { background: #f4f6fb; color: #555; }
+
 /* ── Votes box ─────────────────────────────────────────────── */
 .votes-box {
   display: inline-block;
