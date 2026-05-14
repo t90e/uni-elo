@@ -1,7 +1,5 @@
 let current = { player1: null, player2: null };
 let busy = false;
-let skipCount = 0;
-let captchaAnswer = null;
 
 function setPhoto(wrapEl, url) {
   wrapEl.innerHTML = '';
@@ -83,57 +81,11 @@ async function castVote(num) {
     console.error(e);
   }
 
-  skipCount = 0;
-  hideCaptcha();
   setTimeout(() => { busy = false; loadPair(); }, 600);
-}
-
-function showCaptcha() {
-  const a = Math.floor(Math.random() * 10) + 1;
-  const b = Math.floor(Math.random() * 10) + 1;
-  captchaAnswer = a + b;
-
-  const box = document.getElementById('captcha-box');
-  document.getElementById('captcha-question').textContent = `What is ${a} + ${b}?`;
-  document.getElementById('captcha-input').value = '';
-  document.getElementById('captcha-error').textContent = '';
-  box.style.display = 'block';
-  document.getElementById('captcha-input').focus();
-}
-
-function hideCaptcha() {
-  document.getElementById('captcha-box').style.display = 'none';
-}
-
-function submitCaptcha() {
-  const val = parseInt(document.getElementById('captcha-input').value);
-  if (val === captchaAnswer) {
-    skipCount = 0;
-    hideCaptcha();
-    loadPair();
-  } else {
-    document.getElementById('captcha-error').textContent = 'Wrong answer, try again.';
-    document.getElementById('captcha-input').value = '';
-    showCaptcha();
-  }
 }
 
 document.getElementById('card1').addEventListener('click', () => castVote(1));
 document.getElementById('card2').addEventListener('click', () => castVote(2));
-
-document.getElementById('skip-btn').addEventListener('click', () => {
-  if (busy) return;
-  skipCount++;
-  if (skipCount > 3) {
-    showCaptcha();
-  } else {
-    loadPair();
-  }
-});
-
-document.getElementById('captcha-submit').addEventListener('click', submitCaptcha);
-document.getElementById('captcha-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') submitCaptcha();
-});
+document.getElementById('skip-btn').addEventListener('click', () => { if (!busy) loadPair(); });
 
 loadPair();
