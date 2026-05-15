@@ -62,8 +62,8 @@
           <span class="p-name">{{ player.battletag.split('#')[0] }}</span>{% if '#' in player.battletag %}<span class="bt-hash">#{{ player.battletag.split('#')[1] }}</span>{% endif %}
         </td>
         <td>{{ player.team }}</td>
-        <td class="elo-cell">{{ player.elo }}</td>
-        <td class="votes-cell">{{ player.win_rate }}%</td>
+        <td class="elo-cell">{% if player.elo >= 1000 %}{{ player.elo }}{% endif %}</td>
+        <td class="votes-cell">{% if player.elo >= 1000 %}{{ player.win_rate }}%{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
