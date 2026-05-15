@@ -37,6 +37,7 @@
         <th>Player</th>
         <th>Team</th>
         <th>ELO</th>
+        <th>Win %</th>
       </tr>
     </thead>
     <tbody>
@@ -62,6 +63,7 @@
         </td>
         <td>{{ player.team }}</td>
         <td class="elo-cell">{{ player.elo }}</td>
+        <td class="votes-cell">{{ player.win_rate }}%</td>
       </tr>
       {% endfor %}
     </tbody>
