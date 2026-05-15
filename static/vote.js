@@ -1,4 +1,5 @@
 let current = { player1: null, player2: null };
+let next    = null;  // prefetched pair
 let busy = false;
 
 function setPhoto(wrapEl, url) {
@@ -30,31 +31,47 @@ function setName(el, tag) {
   el.appendChild(hash);
 }
 
+function applyPair(data) {
+  current = data;
+  setPhoto(document.getElementById('wrap1'), data.player1.image_url);
+  setName(document.getElementById('name1'), data.player1.battletag);
+  document.getElementById('team1').textContent = data.player1.team;
+
+  setPhoto(document.getElementById('wrap2'), data.player2.image_url);
+  setName(document.getElementById('name2'), data.player2.battletag);
+  document.getElementById('team2').textContent = data.player2.team;
+}
+
+function prefetch() {
+  fetch('/api/pair').then(r => r.json()).then(data => { next = data; }).catch(() => {});
+}
+
 async function loadPair() {
   if (busy) return;
   const arena = document.getElementById('arena');
-  arena.classList.add('loading');
   document.getElementById('card1').classList.remove('winner', 'loser');
   document.getElementById('card2').classList.remove('winner', 'loser');
   document.getElementById('win1').textContent = '';
   document.getElementById('win2').textContent = '';
 
-  try {
-    const res  = await fetch('/api/pair');
-    const data = await res.json();
-    current = data;
-
-    setPhoto(document.getElementById('wrap1'), data.player1.image_url);
-    setName(document.getElementById('name1'), data.player1.battletag);
-    document.getElementById('team1').textContent = data.player1.team;
-
-    setPhoto(document.getElementById('wrap2'), data.player2.image_url);
-    setName(document.getElementById('name2'), data.player2.battletag);
-    document.getElementById('team2').textContent = data.player2.team;
-  } catch (e) {
-    console.error(e);
-  } finally {
-    arena.classList.remove('loading');
+  if (next) {
+    // instant — use prefetched pair
+    applyPair(next);
+    next = null;
+    prefetch();  // start fetching the one after
+  } else {
+    // fallback: fetch now
+    arena.classList.add('loading');
+    try {
+      const res  = await fetch('/api/pair');
+      const data = await res.json();
+      applyPair(data);
+      prefetch();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      arena.classList.remove('loading');
+    }
   }
 }
 
@@ -77,7 +94,7 @@ function castVote(num) {
     c.textContent = parseInt(c.textContent.replace(/,/g, '')) + 1;
   }).catch(e => console.error(e));
 
-  setTimeout(() => { busy = false; loadPair(); }, 180);
+  setTimeout(() => { busy = false; loadPair(); }, 150);
 }
 
 document.getElementById('card1').addEventListener('click', () => castVote(1));
