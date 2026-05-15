@@ -6,6 +6,7 @@ import random
 import uuid as _uuid
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from flask import Flask, render_template, jsonify, request, abort, g
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -24,9 +25,25 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+_pool = None
+def _get_pool():
+    global _pool
+    if _pool is None and DATABASE_URL:
+        _pool = psycopg2.pool.ThreadedConnectionPool(2, 10, DATABASE_URL)
+    return _pool
 
 def get_db():
+    pool = _get_pool()
+    if pool:
+        return pool.getconn()
     return psycopg2.connect(DATABASE_URL)
+
+def release_db(conn):
+    pool = _get_pool()
+    if pool:
+        pool.putconn(conn)
+    else:
+        release_db(conn)
 
 
 def q(conn, sql, params=None):
@@ -127,7 +144,7 @@ def index():
     try:
         total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
     finally:
-        conn.close()
+        release_db(conn)
     return render_template("index.html", total_votes=total_votes)
 
 
@@ -144,7 +161,7 @@ def leaderboard():
         """).fetchall()
         total_votes = q(conn, "SELECT COUNT(*) AS n FROM votes").fetchone()["n"]
     finally:
-        conn.close()
+        release_db(conn)
     return render_template(
         "leaderboard.html",
         players=[dict(p) for p in players],
@@ -178,7 +195,7 @@ def get_pair():
             p1 = rows[0] if len(rows) > 0 else None
             p2 = rows[1] if len(rows) > 1 else None
     finally:
-        conn.close()
+        release_db(conn)
 
     if not p1 or not p2:
         abort(503)
@@ -234,7 +251,7 @@ def vote():
           (winner_id, loser_id, winner["elo"], loser["elo"], new_w, new_l, client_ip, voter_id))
         conn.commit()
     finally:
-        conn.close()
+        release_db(conn)
 
     return jsonify({"ok": True})
 
