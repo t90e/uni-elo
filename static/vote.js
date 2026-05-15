@@ -36,10 +36,12 @@ function applyPair(data) {
   setPhoto(document.getElementById('wrap1'), data.player1.image_url);
   setName(document.getElementById('name1'), data.player1.battletag);
   document.getElementById('team1').textContent = data.player1.team;
+  document.getElementById('elo1').textContent  = data.player1.elo;
 
   setPhoto(document.getElementById('wrap2'), data.player2.image_url);
   setName(document.getElementById('name2'), data.player2.battletag);
   document.getElementById('team2').textContent = data.player2.team;
+  document.getElementById('elo2').textContent  = data.player2.elo;
 }
 
 function prefetch() {

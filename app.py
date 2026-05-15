@@ -103,6 +103,7 @@ def public_player(row):
         "battletag": row["battletag"],
         "team":      row["team"],
         "image_url": row["image_url"],
+        "elo":       row["elo"],
     }
 
 

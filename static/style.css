@@ -133,6 +133,7 @@ a:hover { text-decoration: underline; }
 }
 .bt-hash { color: #999; font-weight: normal; font-size: 14px; }
 .p-team  { font-size: 13px; color: #666; margin-top: 4px; }
+.p-elo   { font-size: 12px; color: #1c3764; font-weight: bold; margin-top: 2px; }
 
 .winner-label {
   font-size: 12px;
