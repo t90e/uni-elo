@@ -177,13 +177,18 @@ def leaderboard():
 def get_pair():
     conn = get_db()
     try:
-        if random.random() < 0.5:
+        if random.random() < 0.8:
             p1 = q(conn, "SELECT * FROM players ORDER BY RANDOM() LIMIT 1").fetchone()
             if p1:
                 p2 = q(conn,
-                    "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 300 ORDER BY RANDOM() LIMIT 1",
+                    "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 100 ORDER BY RANDOM() LIMIT 1",
                     (p1["id"], p1["elo"])
                 ).fetchone()
+                if not p2:
+                    p2 = q(conn,
+                        "SELECT * FROM players WHERE id != %s AND ABS(elo - %s) <= 200 ORDER BY RANDOM() LIMIT 1",
+                        (p1["id"], p1["elo"])
+                    ).fetchone()
                 if not p2:
                     p2 = q(conn,
                         "SELECT * FROM players WHERE id != %s ORDER BY RANDOM() LIMIT 1",
